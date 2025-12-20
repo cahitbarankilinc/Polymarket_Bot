@@ -1,0 +1,30 @@
+{
+  "name": "polymarket_bot",
+  "version": "1.0.0",
+  "description": "Polymarket automated buyer bot using Playwright",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "node --loader ts-node/esm src/index.ts"
+  },
+  "keywords": [
+    "polymarket",
+    "playwright",
+    "automation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.49.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}
