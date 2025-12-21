@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -63,6 +64,9 @@ class Worker:
         except Exception as exc:  # pylint: disable=broad-exception-caught
             logging.exception("Run failed: %s", exc)
             return WorkerResult(ran=False, skipped_reason=str(exc))
+        finally:
+            if once and not self.config.auto_close_browser and self._browser_context:
+                self._wait_for_manual_close()
 
     def _execute(self, now: datetime) -> None:
         playwright = self._ensure_playwright()
@@ -109,6 +113,23 @@ class Worker:
                     logging.warning("Playwright stop failed")
             else:
                 logging.info("Leaving browser/context open (AUTO_CLOSE_BROWSER=%s)", self.config.auto_close_browser)
+
+    def _wait_for_manual_close(self) -> None:
+        logging.info(
+            "AUTO_CLOSE_BROWSER disabled; keeping browser open. Press ESC or Ctrl+C to exit without closing it."
+        )
+        while True:
+            try:
+                if self._stop_requested():
+                    logging.info("Stop requested; exiting without closing browser")
+                    break
+                time.sleep(1)
+            except KeyboardInterrupt:
+                if self.stop_controller:
+                    self.stop_controller.request_stop(
+                        "STOP requested by KeyboardInterrupt during manual browser hold"
+                    )
+                break
 
     def _navigate_and_prepare(self, trade_page: TradePage) -> None:
         page = trade_page.page
