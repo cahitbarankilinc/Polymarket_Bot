@@ -3,3 +3,8 @@ __pycache__/
 runs/
 storage/
 state.json
+polymarket_watcher/.env
+polymarket_watcher/results.txt
+polymarket_watcher/state.json
+polymarket_watcher/screenshots/
+polymarket_watcher/storage/
