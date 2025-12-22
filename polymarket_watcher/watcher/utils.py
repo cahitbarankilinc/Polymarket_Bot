@@ -42,11 +42,13 @@ def current_bucket_close_time_berlin(now_berlin: datetime) -> datetime:
     return bucket_close
 
 
-def event_timestamp_from_close_time(close_dt_berlin: datetime) -> int:
-    if close_dt_berlin.tzinfo is None:
-        raise ValueError("close_dt_berlin must be timezone-aware")
-    close_utc = close_dt_berlin.astimezone(UTC)
-    return int(close_utc.timestamp())
+def event_timestamp_from_bucket_start(bucket_start_berlin: datetime) -> int:
+    """Convert the current 15-minute bucket start in Berlin time to a UTC timestamp."""
+
+    if bucket_start_berlin.tzinfo is None:
+        raise ValueError("bucket_start_berlin must be timezone-aware")
+    start_utc = bucket_start_berlin.astimezone(UTC)
+    return int(start_utc.timestamp())
 
 
 def parse_price(text: Optional[str]) -> Optional[int]:

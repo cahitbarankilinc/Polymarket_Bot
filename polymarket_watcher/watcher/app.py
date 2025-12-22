@@ -17,7 +17,7 @@ from .utils import (
     append_result_line,
     current_bucket_close_time_berlin,
     current_bucket_times_berlin,
-    event_timestamp_from_close_time,
+    event_timestamp_from_bucket_start,
     most_common_text,
     parse_price,
 )
@@ -96,7 +96,7 @@ async def evaluate_once(page: Page, config: Config, state: BotState) -> float:
 
     now_berlin = datetime.now(berlin_zone)
     bucket_start_berlin, close_dt = current_bucket_times_berlin(now_berlin)
-    event_ts = event_timestamp_from_close_time(close_dt)
+    event_ts = event_timestamp_from_bucket_start(bucket_start_berlin)
     event_slug = f"btc-updown-15m-{event_ts}"
     event_url = f"{config.base_event_url}{event_ts}"
 
