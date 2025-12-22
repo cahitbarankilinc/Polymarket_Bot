@@ -72,6 +72,8 @@ def append_result_line(path: Path, line: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(line)
+        handle.flush()
+    logging.info("Wrote result line: %s", line.strip())
 
 
 def safe_event_key(value: str) -> str:

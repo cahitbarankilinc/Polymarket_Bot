@@ -8,7 +8,7 @@ from typing import Set
 
 @dataclass
 class BotState:
-    seen_timestamps: Set[int] = field(default_factory=set)
+    logged_timestamps: Set[int] = field(default_factory=set)
 
     @classmethod
     def load(cls, path: Path) -> "BotState":
@@ -16,28 +16,30 @@ class BotState:
             return cls()
         try:
             data = json.loads(path.read_text())
-            if "seen_timestamps" in data:
-                seen = set(int(item) for item in data.get("seen_timestamps", []))
+            if "logged_timestamps" in data:
+                logged = set(int(item) for item in data.get("logged_timestamps", []))
+            elif "seen_timestamps" in data:
+                logged = set(int(item) for item in data.get("seen_timestamps", []))
             else:
-                seen = set()
+                logged = set()
                 for event_key in data.get("seen_events", []):
                     try:
                         ts = int(str(event_key).split("-")[-1])
-                        seen.add(ts)
+                        logged.add(ts)
                     except (ValueError, TypeError):
                         continue
-            return cls(seen_timestamps=seen)
+            return cls(logged_timestamps=logged)
         except Exception:  # pylint: disable=broad-exception-caught
             return cls()
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"seen_timestamps": sorted(self.seen_timestamps)}
+        payload = {"logged_timestamps": sorted(self.logged_timestamps)}
         path.write_text(json.dumps(payload, indent=2))
 
-    def has_seen(self, timestamp: int) -> bool:
-        return timestamp in self.seen_timestamps
+    def has_logged(self, timestamp: int) -> bool:
+        return timestamp in self.logged_timestamps
 
-    def mark_seen(self, timestamp: int, path: Path) -> None:
-        self.seen_timestamps.add(timestamp)
+    def mark_logged(self, timestamp: int, path: Path) -> None:
+        self.logged_timestamps.add(timestamp)
         self.save(path)

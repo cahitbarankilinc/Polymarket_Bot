@@ -48,7 +48,7 @@ def load_config() -> Config:
     headless = _str_to_bool(os.getenv("HEADLESS"), default=False)
     auto_close_browser = _str_to_bool(os.getenv("AUTO_CLOSE_BROWSER"), default=False)
 
-    poll_seconds = _str_to_int(os.getenv("POLL_SECONDS"), default=15)
+    poll_seconds = _str_to_int(os.getenv("POLL_SECONDS"), default=3)
     sample_retries = _str_to_int(os.getenv("SAMPLE_RETRIES"), default=3)
     sample_delay_ms = _str_to_int(os.getenv("SAMPLE_DELAY_MS"), default=200)
 

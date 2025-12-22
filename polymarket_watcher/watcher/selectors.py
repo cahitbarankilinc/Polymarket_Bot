@@ -13,11 +13,11 @@ def trade_widget(page: Page) -> Locator:
 
 
 def up_button(widget: Locator) -> Locator:
-    return widget.get_by_role("button", name=re.compile(r"\bUp\b", re.I)).first
+    return widget.get_by_role("button").filter(has_text=re.compile(r"\bUp\b", re.I)).first
 
 
 def down_button(widget: Locator) -> Locator:
-    return widget.get_by_role("button", name=re.compile(r"\bDown\b", re.I)).first
+    return widget.get_by_role("button").filter(has_text=re.compile(r"\bDown\b", re.I)).first
 
 
 def event_heading(page: Page) -> Locator:

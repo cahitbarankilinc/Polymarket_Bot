@@ -7,6 +7,7 @@ Headful Playwright watcher that generates the current Bitcoin 15-minute event UR
 - Headful by default (`HEADLESS=false`) for easy monitoring.
 - Stops on Ctrl+C without closing the browser unless `AUTO_CLOSE_BROWSER=true`.
 - Error tolerance: missing selectors or parse errors are logged, a screenshot is saved, and the bot retries after 5 seconds.
+- Bot screenshot almaz; sadece hata olursa alır.
 - Debounced logging: when a timestamp has already been recorded, the bot sleeps until the next 15-minute bucket.
 - Event URL is produced as `https://polymarket.com/event/btc-updown-15m-<UTC_BUCKET_START_TIMESTAMP>`, where the timestamp is the UTC Unix seconds for the bucket start. Buckets advance by 900 seconds (15 minutes).
 
@@ -41,5 +42,5 @@ Headful Playwright watcher that generates the current Bitcoin 15-minute event UR
   2025-12-22T01:06:42+01:00 | btc-updown-15m-1734837300 | Won
   2025-12-22T01:21:42+01:00 | btc-updown-15m-1734838200 | Lost
   ```
-- State of seen bucket timestamps is stored in `state.json` to avoid duplicate lines.
+- State of logged bucket timestamps is stored in `state.json` to avoid duplicate lines.
 - Error screenshots are saved under `screenshots/`.
