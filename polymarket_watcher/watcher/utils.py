@@ -22,14 +22,12 @@ def timestamp_now(timezone: str) -> str:
     return datetime.now(tzinfo).isoformat()
 
 
-def next_close_time_berlin(now_berlin: datetime) -> datetime:
+def current_bucket_close_time_berlin(now_berlin: datetime) -> datetime:
     if now_berlin.tzinfo is None:
         raise ValueError("now_berlin must be timezone-aware")
-    next_bucket_minute = ((now_berlin.minute // 15) + 1) * 15
-    if next_bucket_minute >= 60:
-        base = now_berlin + timedelta(hours=1)
-        return base.replace(minute=0, second=0, microsecond=0)
-    return now_berlin.replace(minute=next_bucket_minute, second=0, microsecond=0)
+    bucket_minute = (now_berlin.minute // 15) * 15
+    bucket_start = now_berlin.replace(minute=bucket_minute, second=0, microsecond=0)
+    return bucket_start + timedelta(minutes=15)
 
 
 def event_timestamp_from_close_time(close_dt_berlin: datetime) -> int:
