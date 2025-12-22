@@ -15,9 +15,10 @@ from .config import Config, load_config
 from .state import BotState
 from .utils import (
     append_result_line,
+    current_bucket_close_time_berlin,
+    current_bucket_times_berlin,
     event_timestamp_from_close_time,
     most_common_text,
-    next_close_time_berlin,
     parse_price,
 )
 
@@ -94,13 +95,22 @@ async def evaluate_once(page: Page, config: Config, state: BotState) -> float:
         berlin_zone = ZoneInfo("Europe/Berlin")
 
     now_berlin = datetime.now(berlin_zone)
-    close_dt = next_close_time_berlin(now_berlin)
+    bucket_start_berlin, close_dt = current_bucket_times_berlin(now_berlin)
     event_ts = event_timestamp_from_close_time(close_dt)
     event_slug = f"btc-updown-15m-{event_ts}"
     event_url = f"{config.base_event_url}{event_ts}"
 
+    logging.info(
+        "Timing | now_berlin=%s | bucket_start=%s | close_berlin=%s | ts=%s | event_url=%s",
+        now_berlin.isoformat(),
+        bucket_start_berlin.isoformat(),
+        close_dt.isoformat(),
+        event_ts,
+        event_url,
+    )
+
     if state.has_seen(event_ts):
-        next_bucket = next_close_time_berlin(close_dt + timedelta(seconds=1))
+        next_bucket = current_bucket_close_time_berlin(close_dt + timedelta(seconds=1))
         sleep_seconds = max(1, int((next_bucket - now_berlin).total_seconds()))
         logging.info("Timestamp %s already recorded; sleeping %ss", event_slug, sleep_seconds)
         return sleep_seconds
