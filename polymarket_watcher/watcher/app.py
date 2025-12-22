@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import signal
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
 
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError, async_playwright
+from playwright.async_api import Page, async_playwright
 from zoneinfo import ZoneInfo
 
 from . import selectors
@@ -17,7 +18,6 @@ from .utils import (
     append_result_line,
     current_bucket_times_berlin,
     event_timestamp_from_bucket_start,
-    most_common_text,
     parse_price,
 )
 
@@ -53,40 +53,89 @@ async def launch_context(playwright, config: Config):
         return await playwright.chromium.launch_persistent_context(**launch_kwargs)
 
 
-async def sample_button_text(page: Page, locator, retries: int, delay_ms: int) -> str:
-    samples = []
-    for attempt in range(1, retries + 1):
-        try:
-            samples.append(await locator.inner_text())
-        except Exception as exc:  # pylint: disable-broad-exception-caught
-            logging.debug("Attempt %s/%s: unable to read text (%s)", attempt, retries, exc)
-        await page.wait_for_timeout(delay_ms)
-    value = most_common_text(samples)
-    if not value:
-        raise RuntimeError("Could not capture button text")
-    return value
+async def wait_for_trade_widget(page: Page, config: Config) -> None:
+    widget = selectors.trade_widget(page)
+    screenshot_taken = False
+
+    for attempt in range(2):
+        waited = 0
+        while waited < 20000:
+            try:
+                if await widget.count() > 0:
+                    logging.info("Trade widget detected after %.1fs", waited / 1000)
+                    return
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logging.debug("Widget count attempt failed: %s", exc)
+            await page.wait_for_timeout(200)
+            waited += 200
+
+        if not screenshot_taken:
+            logging.warning("Trade widget not found within timeout; capturing screenshot and retrying")
+            await capture_screenshot(page, config.screenshot_dir, "missing-trade-widget")
+            screenshot_taken = True
+
+    raise RuntimeError("Trade widget not visible after retries")
+
+
+async def fetch_button_texts(page: Page) -> dict[str, str | None]:
+    return await page.evaluate(
+        """
+        () => {
+          const w = document.querySelector('#trade-widget') || document;
+          const buttons = Array.from(w.querySelectorAll('button'));
+          const upBtn = buttons.find(b => /\\bUp\\b/i.test(b.textContent || ''));
+          const downBtn = buttons.find(b => /\\bDown\\b/i.test(b.textContent || ''));
+          return {
+            upText: upBtn ? (upBtn.textContent || '').trim() : null,
+            downText: downBtn ? (downBtn.textContent || '').trim() : null,
+          };
+        }
+        """
+    )
+
+
+async def ensure_buy_tab_selected(page: Page) -> bool:
+    buy_tab = page.get_by_role("tab", name=re.compile(r"\\bBuy\\b", re.I)).first
+    if await buy_tab.count() == 0:
+        logging.debug("Buy tab not found on page")
+        return False
+
+    try:
+        is_selected = await buy_tab.get_attribute("aria-selected")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logging.debug("Unable to read buy tab state: %s", exc)
+        is_selected = None
+
+    if isinstance(is_selected, str) and is_selected.lower() == "true":
+        return True
+
+    try:
+        await buy_tab.click()
+        await page.wait_for_timeout(200)
+        logging.info("Switched to Buy tab")
+        return True
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logging.warning("Failed to select Buy tab: %s", exc)
+        return False
 
 
 async def read_prices(page: Page, config: Config) -> Tuple[int, int, str, str]:
-    widget = selectors.trade_widget(page)
-    try:
-        await widget.wait_for(state="visible", timeout=20000)
-    except PlaywrightTimeoutError:
-        raise RuntimeError("Trade widget not visible")
+    await wait_for_trade_widget(page, config)
 
-    up_btn = selectors.up_button(widget)
-    down_btn = selectors.down_button(widget)
-    await asyncio.gather(
-        up_btn.wait_for(state="visible", timeout=15000),
-        down_btn.wait_for(state="visible", timeout=15000),
-    )
+    prices = await fetch_button_texts(page)
+    if prices["upText"] is None and prices["downText"] is None:
+        if await ensure_buy_tab_selected(page):
+            prices = await fetch_button_texts(page)
 
-    up_text = await sample_button_text(page, up_btn, config.sample_retries, config.sample_delay_ms)
-    down_text = await sample_button_text(page, down_btn, config.sample_retries, config.sample_delay_ms)
+    up_text = prices.get("upText")
+    down_text = prices.get("downText")
+    if up_text is None or down_text is None:
+        raise RuntimeError(f"Unable to read button text (Up: {up_text!r}, Down: {down_text!r})")
 
     up_price = parse_price(up_text)
     down_price = parse_price(down_text)
     if up_price is None or down_price is None:
+        await capture_screenshot(page, config.screenshot_dir, "unparsed-prices")
         raise RuntimeError(f"Unable to parse prices (Up: {up_text!r}, Down: {down_text!r})")
 
     logging.info("Current prices | Up: %s¢ | Down: %s¢", up_price, down_price)
