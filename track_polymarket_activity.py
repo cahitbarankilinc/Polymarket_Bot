@@ -2,13 +2,13 @@
 Polymarket real-time activity tracker.
 
 Usage:
-    python track_polymarket_activity.py --minutes 10 --output-dir polymarket_realtime_output
+    python track_polymarket_activity.py --minutes 0 --output-dir polymarket_realtime_output
 
 The tracker polls Polymarket's public data APIs every 3 seconds to monitor
 activity for a configured Ethereum address, keeps a FIFO buffer of the most
 recent events, filters for the "btc-updown-15m-" market, persists a lightweight
 `state.json` for deduplication, and emits a `polymarket_realtime_report.md`
-summary at exit.
+summary at exit (or when you stop the process).
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import requests
 
 DEFAULT_ADDRESS = "0x23cb796cf58bfa12352f0164f479deedbd50658e"
-DEFAULT_MINUTES = 10
+DEFAULT_MINUTES = 0
 POLL_INTERVAL_SECONDS = 3
 MAX_EVENTS = 200
 FILTER_MARKET = "btc-updown-15m-"
@@ -297,9 +297,9 @@ def poll_events(address: str, minutes: int, output_dir: str) -> None:
     error_log: List[str] = []
 
     start_time = utc_now_iso()
-    end_time = time.time() + minutes * 60
+    end_time = time.time() + minutes * 60 if minutes > 0 else None
 
-    while time.time() < end_time:
+    while end_time is None or time.time() < end_time:
         params = {"user": address, "limit": 50, "offset": 0}
         activity = fetch_endpoint(ACTIVITY_URL, params, error_log)
         trades = fetch_endpoint(TRADES_URL, params, error_log)
@@ -338,7 +338,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--minutes",
         type=int,
         default=DEFAULT_MINUTES,
-        help="How many minutes to monitor before finalizing the report",
+        help="How many minutes to monitor before finalizing the report (0 = run until stopped)",
     )
     parser.add_argument(
         "--output-dir",
