@@ -225,7 +225,7 @@ def compute_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def write_report(path: str, address: str, start_time: str, events: List[Dict[str, Any]], errors: List[str]) -> None:
     summary = compute_summary(events)
-    recent_events = events[-20:]
+    recent_events = events[:20]
 
     lines = []
     lines.append("# Polymarket Real-Time Activity Report")
@@ -315,8 +315,8 @@ def poll_events(address: str, minutes: int, output_dir: str) -> None:
                 new_events.append(normalized)
 
         if new_events:
-            for event in new_events:
-                all_events.append(event)
+            for event in reversed(new_events):
+                all_events.appendleft(event)
             write_events(events_path, all_events)
 
         state.last_check = utc_now_iso()
