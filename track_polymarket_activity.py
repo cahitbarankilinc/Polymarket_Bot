@@ -6,7 +6,7 @@ Usage:
 
 The tracker polls Polymarket's public data APIs every 3 seconds to monitor
 activity for a configured Ethereum address, keeps a FIFO buffer of the most
-recent events, filters for the "btc-updown-15m-" market, persists a lightweight
+recent events, persists a lightweight
 `state.json` for deduplication, and emits a `polymarket_realtime_report.md`
 summary at exit (or when you stop the process).
 """
@@ -27,8 +27,6 @@ DEFAULT_ADDRESS = "0x23cb796cf58bfa12352f0164f479deedbd50658e"
 DEFAULT_MINUTES = 0
 POLL_INTERVAL_SECONDS = 3
 MAX_EVENTS = 200
-FILTER_MARKET = "btc-updown-15m-"
-
 ACTIVITY_URL = "https://data-api.polymarket.com/activity"
 TRADES_URL = "https://data-api.polymarket.com/trades"
 
@@ -312,8 +310,6 @@ def poll_events(address: str, minutes: int, output_dir: str) -> None:
                 continue
             for item in payload:
                 event_id, normalized = normalize_event(item, source, seen_at)
-                if normalized.get("market") != FILTER_MARKET:
-                    continue
                 if not state.track_event_id(event_id):
                     continue
                 new_events.append(normalized)
