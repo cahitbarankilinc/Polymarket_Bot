@@ -2,12 +2,13 @@
 Polymarket real-time activity tracker.
 
 Usage:
-    python track_polymarket_activity.py --minutes 10 --output-dir polymarket_realtime_output
+    python track_polymarket_activity.py --output-dir polymarket_realtime_output
 
-The tracker polls Polymarket's public data APIs to monitor activity for a
-configured Ethereum address, normalizes new events, appends them to
-`events.ndjson`, persists a lightweight `state.json` for deduplication, and
-emits a `polymarket_realtime_report.md` summary at exit.
+The tracker polls Polymarket's public data APIs every 3 seconds to monitor
+activity for a configured Ethereum address, keeps a FIFO buffer of the most
+recent events, filters for the "btc-updown-15m-" market, persists a lightweight
+`state.json` for deduplication, and emits a `polymarket_realtime_report.md`
+summary at exit.
 """
 from __future__ import annotations
 
@@ -17,22 +18,29 @@ import json
 import os
 import sys
 import time
-from collections import Counter
+from collections import Counter, deque
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
 
 DEFAULT_ADDRESS = "0x23cb796cf58bfa12352f0164f479deedbd50658e"
-DEFAULT_MINUTES = 10
-POLL_INTERVALS = [3, 5, 10]
+POLL_INTERVAL_SECONDS = 3
+MAX_EVENTS = 200
+FILTER_MARKET = "btc-updown-15m-"
 
 ACTIVITY_URL = "https://data-api.polymarket.com/activity"
 TRADES_URL = "https://data-api.polymarket.com/trades"
 
 
 class State:
-    def __init__(self, seen_ids: Optional[Iterable[str]] = None, last_check: Optional[str] = None):
+    def __init__(
+        self,
+        seen_ids: Optional[Iterable[str]] = None,
+        seen_queue: Optional[Iterable[str]] = None,
+        last_check: Optional[str] = None,
+    ):
         self.seen_ids = set(seen_ids or [])
+        self.seen_queue = deque(seen_queue or [])
         self.last_check = last_check
 
     @classmethod
@@ -42,7 +50,7 @@ class State:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
-            return cls(raw.get("seen_ids", []), raw.get("last_check"))
+            return cls(raw.get("seen_ids", []), raw.get("seen_queue", []), raw.get("last_check"))
         except Exception:
             # Fall back to empty state on parse error.
             return cls()
@@ -50,10 +58,21 @@ class State:
     def save(self, path: str) -> None:
         payload = {
             "seen_ids": sorted(self.seen_ids),
+            "seen_queue": list(self.seen_queue),
             "last_check": self.last_check,
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
+
+    def track_event_id(self, event_id: str) -> bool:
+        if event_id in self.seen_ids:
+            return False
+        self.seen_ids.add(event_id)
+        self.seen_queue.append(event_id)
+        while len(self.seen_queue) > MAX_EVENTS:
+            oldest = self.seen_queue.popleft()
+            self.seen_ids.discard(oldest)
+        return True
 
 
 def utc_now_iso() -> str:
@@ -152,10 +171,26 @@ def normalize_event(raw: Dict[str, Any], source: str, seen_at: str) -> Tuple[str
     return event_id, normalized
 
 
-def append_events(path: str, events: List[Dict[str, Any]]) -> None:
-    with open(path, "a", encoding="utf-8") as f:
+def write_events(path: str, events: Iterable[Dict[str, Any]]) -> None:
+    with open(path, "w", encoding="utf-8") as f:
         for event in events:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+def load_existing_events(path: str) -> deque[Dict[str, Any]]:
+    events: deque[Dict[str, Any]] = deque(maxlen=MAX_EVENTS)
+    if not os.path.exists(path):
+        return events
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return events
 
 
 def compute_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -250,63 +285,54 @@ def write_report(path: str, address: str, start_time: str, events: List[Dict[str
         f.write("\n".join(lines))
 
 
-def poll_events(address: str, minutes: int, output_dir: str) -> None:
+def poll_events(address: str, output_dir: str) -> None:
     os.makedirs(output_dir, exist_ok=True)
     state_path = os.path.join(output_dir, "state.json")
     events_path = os.path.join(output_dir, "events.ndjson")
     report_path = os.path.join(output_dir, "polymarket_realtime_report.md")
 
     state = State.load(state_path)
-    all_events: List[Dict[str, Any]] = []
+    all_events = load_existing_events(events_path)
     error_log: List[str] = []
-    backoff_index = 0
 
     start_time = utc_now_iso()
-    end_time = time.time() + minutes * 60
+    try:
+        while True:
+            params = {"user": address, "limit": 50, "offset": 0}
+            activity = fetch_endpoint(ACTIVITY_URL, params, error_log)
+            trades = fetch_endpoint(TRADES_URL, params, error_log)
 
-    while time.time() < end_time:
-        params = {"user": address, "limit": 50, "offset": 0}
-        activity = fetch_endpoint(ACTIVITY_URL, params, error_log)
-        trades = fetch_endpoint(TRADES_URL, params, error_log)
+            new_events: List[Dict[str, Any]] = []
+            seen_at = utc_now_iso()
 
-        new_events: List[Dict[str, Any]] = []
-        seen_at = utc_now_iso()
-
-        for payload, source in ((activity, "activity"), (trades, "trades")):
-            if not payload:
-                continue
-            for item in payload:
-                event_id, normalized = normalize_event(item, source, seen_at)
-                if event_id in state.seen_ids:
+            for payload, source in ((activity, "activity"), (trades, "trades")):
+                if not payload:
                     continue
-                state.seen_ids.add(event_id)
-                new_events.append(normalized)
+                for item in payload:
+                    event_id, normalized = normalize_event(item, source, seen_at)
+                    if normalized.get("market") != FILTER_MARKET:
+                        continue
+                    if not state.track_event_id(event_id):
+                        continue
+                    new_events.append(normalized)
 
-        if new_events:
-            append_events(events_path, new_events)
-            all_events.extend(new_events)
-            backoff_index = 0
-        else:
-            backoff_index = min(backoff_index + 1, len(POLL_INTERVALS) - 1)
+            if new_events:
+                for event in new_events:
+                    all_events.append(event)
+                write_events(events_path, all_events)
 
-        state.last_check = utc_now_iso()
-        state.save(state_path)
+            state.last_check = utc_now_iso()
+            state.save(state_path)
 
-        sleep_for = POLL_INTERVALS[backoff_index]
-        time.sleep(sleep_for)
+            time.sleep(POLL_INTERVAL_SECONDS)
+    except KeyboardInterrupt:
+        pass
 
-    write_report(report_path, address, start_time, all_events, error_log)
+    write_report(report_path, address, start_time, list(all_events), error_log)
 
 
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Track Polymarket activity for a wallet")
-    parser.add_argument("--address", default=DEFAULT_ADDRESS, help="Ethereum address to track")
-    parser.add_argument(
-        "--minutes",
-        type=int,
-        default=DEFAULT_MINUTES,
-        help="How many minutes to monitor before finalizing the report",
-    )
     parser.add_argument(
         "--output-dir",
         default="polymarket_realtime_output",
@@ -317,7 +343,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
-    poll_events(args.address, args.minutes, args.output_dir)
+    entered = input(f"Izlenecek adresi girin (varsayilan: {DEFAULT_ADDRESS}): ").strip()
+    address = entered or DEFAULT_ADDRESS
+    poll_events(address, args.output_dir)
     return 0
 
 
