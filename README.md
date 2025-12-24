@@ -1,34 +1,62 @@
 # Polymarket Bot
 
-See `polymarket_bot_py/README.md` for usage instructions and project layout for the Playwright-based automation bot.
+## 1) Depoyu indir
+```bash
+git clone <REPO_URL>
+cd Polymarket_Bot
+```
 
-## Real-time activity tracker (new)
+## 2) Sanal ortam oluştur + aktif et
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+(Windows için: venv\Scripts\activate)
+Bu adım README’de önerilen standart kurulum akışıdır. (Ref: polymarket_bot_py/README.md)
 
-A standalone Python script, `track_polymarket_activity.py`, polls Polymarket's public data APIs to watch a wallet's live activity and summarize it into Markdown and NDJSON outputs. Default target wallet: `0x23cb796cf58bfa12352f0164f479deedbd50658e`.
-
-### Requirements
-
-Install dependencies (Python 3.11+):
-
+## 3) Gereksinimleri yükle
 ```bash
 pip install -r requirements.txt
+pip install -r polymarket_bot_py/requirements.txt
+Projede hem ana dizinde hem de polymarket_bot_py/ altında ayrı requirements bulunuyor; ikisini de kurmak en güvenlisi. (Ref: requirements.txt, polymarket_bot_py/requirements.txt)
 ```
 
-### Running the tracker
-
+## 4) Playwright tarayıcılarını kur
 ```bash
-python track_polymarket_activity.py --minutes 10 --output-dir polymarket_realtime_output
+playwright install
 ```
+Bot Playwright kullandığı için tarayıcı kurulumunu zorunlu. (Ref: polymarket_bot_py/README.md)
 
-The tracker will:
+## 5) .env dosyasını oluştur
+```bash
+cp polymarket_bot_py/.env.example polymarket_bot_py/.env
+```
+Sonra .env içini ihtiyacına göre güncelle:
+Free modda sadece giriş için Chrome açılacaksa HEADLESS=false önerilir.
+Trade mod için DRY_RUN=false yaparak gerçek işlem açtırabilirsin.
+(Ref: polymarket_bot_py/.env.example, polymarket_bot_py/README.md)
 
-- Poll both `activity` and `trades` endpoints every 3 seconds, backing off to 5s and 10s on rate limits/errors.
-- Append normalized events to `events.ndjson`.
-- Track seen event IDs in `state.json` for deduplication.
-- Emit `polymarket_realtime_report.md` summarizing the latest events and statistics when the session ends.
+# 🚀 Çalıştırma Komutları
+## ✅ Free Mod (Chrome aç ve açık kalsın)
+```bash
+python -m polymarket_bot_py.bot.main --mode free
+```
+Chrome açılır, sen manuel giriş yaparsın. Bot Chrome’u kapatmaz.
+(Ref: polymarket_bot_py/README.md)
 
-Command-line options:
+## ✅ Trade Mod (events.ndjson okuyup otomatik trade)
+```bash
+python -m polymarket_bot_py.bot.main --mode trade
+```
+track_polymarket_activity.py arka planda çalışır, events.ndjson dosyasını günceller ve bot her dakika en üst event ile trade yapar.
+(Ref: polymarket_bot_py/README.md)
 
-- `--address`: Ethereum address to monitor (defaults to the target wallet above).
-- `--minutes`: Duration to watch before finalizing the report (default: 10).
-- `--output-dir`: Destination folder for report, event log, and state files (default: `polymarket_realtime_output`).
+## ✅ Standart Scheduler Mod (15 dakikada bir çalışır)
+```bash
+python -m polymarket_bot_py.bot.main
+```
+(Ref: polymarket_bot_py/README.md)
+⚠️ Notlar
+Chrome’u bot asla kapatmaz (AUTO_CLOSE_BROWSER=false varsayılan).
+Kapatmak istersen terminalden Ctrl+C ile durdurabilirsin.
+(Ref: polymarket_bot_py/README.md)
