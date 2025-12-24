@@ -18,8 +18,9 @@ Bu adım README’de önerilen standart kurulum akışıdır. (Ref: polymarket_b
 ```bash
 pip install -r requirements.txt
 pip install -r polymarket_bot_py/requirements.txt
-Projede hem ana dizinde hem de polymarket_bot_py/ altında ayrı requirements bulunuyor; ikisini de kurmak en güvenlisi. (Ref: requirements.txt, polymarket_bot_py/requirements.txt)
 ```
+Projede hem ana dizinde hem de polymarket_bot_py/ altında ayrı requirements bulunuyor; ikisini de kurmak en güvenlisi. (Ref: requirements.txt, polymarket_bot_py/requirements.txt)
+
 
 ## 4) Playwright tarayıcılarını kur
 ```bash
