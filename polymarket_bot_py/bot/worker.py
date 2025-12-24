@@ -92,7 +92,7 @@ class Worker:
                 if event_data is None:
                     logging.info("No event found in %s", self.config.events_path)
                 else:
-                    event, line_no = event_data
+                    event, event_key = event_data
                     outcome = (event.get("outcome") or "").strip().upper()
                     if outcome not in {"UP", "DOWN"}:
                         logging.warning(
@@ -100,10 +100,10 @@ class Worker:
                             outcome,
                             event.get("market"),
                         )
-                        self._mark_event_processed(line_no)
+                        self._mark_event_processed(event_key)
                         continue
                     self._execute_event_trade(page, event, outcome)
-                    self._mark_event_processed(line_no)
+                    self._mark_event_processed(event_key)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logging.exception("Trade mode error: %s", exc)
 
@@ -323,32 +323,39 @@ class Worker:
         except Exception:  # pylint: disable=broad-exception-caught
             logging.warning("Failed to start tracing")
 
-    def _read_next_event(self, path: Path) -> Optional[tuple[dict[str, Any], int]]:
+    def _read_next_event(self, path: Path) -> Optional[tuple[dict[str, Any], str]]:
         if not path.exists():
             return None
         try:
             with path.open("r", encoding="utf-8") as file:
-                for line_no, line in enumerate(file, start=1):
-                    if line_no <= self.state.last_event_line:
-                        continue
+                for line in file:
                     line = line.strip()
                     if not line:
                         continue
                     try:
-                        return json.loads(line), line_no
+                        event = json.loads(line)
                     except json.JSONDecodeError:
                         logging.warning("Invalid JSON in %s; skipping line", path)
-                        self._mark_event_processed(line_no)
                         continue
+                    event_key = self._event_key(event)
+                    if event_key == self.state.last_event_key:
+                        return None
+                    return event, event_key
         except OSError as exc:
             logging.warning("Unable to read %s: %s", path, exc)
         return None
 
-    def _mark_event_processed(self, line_no: int) -> None:
-        if line_no <= self.state.last_event_line:
+    def _mark_event_processed(self, event_key: str) -> None:
+        if event_key == self.state.last_event_key:
             return
-        self.state.last_event_line = line_no
+        self.state.last_event_key = event_key
         self.state.save(self.config.state_path)
+
+    def _event_key(self, event: dict[str, Any]) -> str:
+        tx_hash = event.get("tx_hash")
+        if tx_hash:
+            return f"tx:{tx_hash}"
+        return json.dumps(event, sort_keys=True, separators=(",", ":"))
 
     def _sleep_until_next_minute(self) -> None:
         interval = max(1, self.config.trade_poll_interval_seconds)
