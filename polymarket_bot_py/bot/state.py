@@ -11,6 +11,7 @@ from typing import Optional
 class BotState:
     last_bucket_key: Optional[str] = None
     pause_until_iso: Optional[str] = None
+    last_event_line: int = 0
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -37,4 +38,3 @@ class BotState:
             return datetime.fromisoformat(self.pause_until_iso)
         except ValueError:
             return None
-
