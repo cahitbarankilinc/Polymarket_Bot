@@ -322,7 +322,24 @@ class Worker:
         old_page = page
         new_page: Optional[Page] = None
         try:
-            old_page.keyboard.press("Meta+T")
+            old_page.bring_to_front()
+            old_page.keyboard.press("Meta+W")
+            old_page.wait_for_event("close", timeout=2000)
+        except Exception:  # pylint: disable=broad-exception-caught
+            logging.warning("Failed to close tab via shortcut; closing directly")
+            try:
+                old_page.close()
+            except Exception:  # pylint: disable=broad-exception-caught
+                logging.warning("Failed to close previous tab")
+        try:
+            active_page = next(
+                (candidate for candidate in self._browser_context.pages if not candidate.is_closed()),
+                None,
+            )
+            if active_page is None:
+                active_page = self._browser_context.new_page()
+            active_page.bring_to_front()
+            active_page.keyboard.press("Meta+T")
             new_page = self._browser_context.wait_for_event("page", timeout=5000)
         except Exception:  # pylint: disable=broad-exception-caught
             logging.warning("Failed to open new tab via shortcut; opening directly")
@@ -330,14 +347,6 @@ class Worker:
             new_page = self._browser_context.new_page()
         new_page.set_default_timeout(0)
         new_page.set_default_navigation_timeout(0)
-        try:
-            old_page.bring_to_front()
-            old_page.keyboard.press("Meta+W")
-        except Exception:  # pylint: disable=broad-exception-caught
-            try:
-                old_page.close()
-            except Exception:  # pylint: disable=broad-exception-caught
-                logging.warning("Failed to close previous tab")
         self._page = new_page
         logging.info("Opened new tab for next trade cycle")
         return new_page
