@@ -84,9 +84,11 @@ class Worker:
         self.run_dir = run_dir
         configure_logging(log_path)
         logging.info("Starting trade mode loop")
-        page = self._ensure_page(self._ensure_browser(self._ensure_playwright()))
+        browser = self._ensure_browser(self._ensure_playwright())
+        page = self._ensure_page(browser)
 
         while not self._stop_requested():
+            error_happened = False
             try:
                 event_data = self._read_next_event(self.config.events_path)
                 if event_data is None:
@@ -105,9 +107,15 @@ class Worker:
                     self._execute_event_trade(page, event, outcome)
                     self._mark_event_processed(event_key)
             except Exception as exc:  # pylint: disable=broad-exception-caught
+                error_happened = True
                 logging.exception("Trade mode error: %s", exc)
 
-            self._sleep_until_next_minute()
+            if not self._stop_requested():
+                if error_happened:
+                    self._sleep_with_stop(30)
+                else:
+                    self._sleep_until_next_minute()
+                page = self._reset_trade_page(browser)
 
         logging.info("Stop requested; exiting trade mode without closing browser")
 
@@ -314,6 +322,17 @@ class Worker:
             self._page.set_default_navigation_timeout(0)
         return self._page
 
+    def _reset_trade_page(self, browser) -> Page:
+        if self._page:
+            try:
+                self._page.close()
+            except Exception:  # pylint: disable=broad-exception-caught
+                logging.warning("Failed to close trade tab")
+        self._page = browser.new_page()
+        self._page.set_default_timeout(0)
+        self._page.set_default_navigation_timeout(0)
+        return self._page
+
     def _stop_requested(self) -> bool:
         return bool(self.stop_controller and self.stop_controller.stop_requested())
 
@@ -373,3 +392,10 @@ class Worker:
             if remaining <= 0:
                 return
             time.sleep(min(remaining, 5))
+
+    def _sleep_with_stop(self, seconds: float) -> None:
+        remaining = float(seconds)
+        while not self._stop_requested() and remaining > 0:
+            sleep_for = min(remaining, 5)
+            time.sleep(sleep_for)
+            remaining -= sleep_for
