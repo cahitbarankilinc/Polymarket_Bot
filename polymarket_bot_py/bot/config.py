@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 @dataclass
 class Config:
     home_15m_url: str
+    free_mode_url: str
     card_text: str
     side: str
     limit_price_cents: float
@@ -26,6 +27,11 @@ class Config:
     slow_mo_ms: int
     runs_root: Path
     state_path: Path
+    trade_event_url_base: str
+    tracker_script: Path
+    tracker_output_dir: Path
+    events_path: Path
+    trade_poll_interval_seconds: int
 
     @staticmethod
     def _get_bool(key: str, default: bool) -> bool:
@@ -33,6 +39,16 @@ class Config:
         if value is None:
             return default
         return value.strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _get_path(key: str) -> Optional[Path]:
+        value = os.getenv(key)
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            return None
+        return Path(value).resolve()
 
     @staticmethod
     def load(env_path: Optional[Path] = None) -> "Config":
@@ -51,9 +67,16 @@ class Config:
 
         runs_root = Path(os.getenv("RUNS_ROOT", "./runs")).resolve()
         state_path = Path(os.getenv("STATE_PATH", "./state.json")).resolve()
+        repo_root = Path(__file__).resolve().parents[2]
+        tracker_output_dir = (
+            Config._get_path("TRACKER_OUTPUT_DIR") or (repo_root / "polymarket_realtime_output").resolve()
+        )
+        events_path = Config._get_path("EVENTS_NDJSON_PATH") or (tracker_output_dir / "events.ndjson").resolve()
+        default_tracker_script = repo_root / "track_polymarket_activity.py"
 
         return Config(
             home_15m_url=os.getenv("HOME_15M_URL", "https://polymarket.com/crypto/15M"),
+            free_mode_url=os.getenv("FREE_MODE_URL", "https://polymarket.com"),
             card_text=os.getenv("CARD_TEXT", "Bitcoin Up or Down - 15 minute"),
             side=side,
             limit_price_cents=float(limit_price_raw),
@@ -68,5 +91,9 @@ class Config:
             slow_mo_ms=int(os.getenv("SLOW_MO_MS", "0")),
             runs_root=runs_root,
             state_path=state_path,
+            trade_event_url_base=os.getenv("TRADE_EVENT_URL_BASE", "https://polymarket.com/event/"),
+            tracker_script=Config._get_path("TRACKER_SCRIPT") or default_tracker_script.resolve(),
+            tracker_output_dir=tracker_output_dir,
+            events_path=events_path,
+            trade_poll_interval_seconds=int(os.getenv("TRADE_POLL_INTERVAL_SECONDS", "60")),
         )
-

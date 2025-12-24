@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from playwright.sync_api import Page, sync_playwright
 
@@ -67,6 +68,46 @@ class Worker:
         finally:
             if once and not self.config.auto_close_browser and self._browser_context:
                 self._wait_for_manual_close()
+
+    def run_free_mode(self) -> None:
+        run_dir, log_path = setup_run_directory(self.config.runs_root, self.config.timezone)
+        self.run_dir = run_dir
+        configure_logging(log_path)
+        logging.info("Starting free mode (browser stays open)")
+        page = self._ensure_page(self._ensure_browser(self._ensure_playwright()))
+        page.goto(self.config.free_mode_url, wait_until="domcontentloaded")
+        logging.info("Opened free mode URL: %s", self.config.free_mode_url)
+        self._wait_for_manual_close()
+
+    def run_trade_mode(self) -> None:
+        run_dir, log_path = setup_run_directory(self.config.runs_root, self.config.timezone)
+        self.run_dir = run_dir
+        configure_logging(log_path)
+        logging.info("Starting trade mode loop")
+        page = self._ensure_page(self._ensure_browser(self._ensure_playwright()))
+
+        while not self._stop_requested():
+            try:
+                event = self._read_latest_event(self.config.events_path)
+                if event is None:
+                    logging.info("No event found in %s", self.config.events_path)
+                else:
+                    outcome = (event.get("outcome") or "").strip().upper()
+                    if outcome not in {"UP", "DOWN"}:
+                        logging.warning(
+                            "Unexpected outcome '%s' (event: %s); stopping trade loop without closing browser",
+                            outcome,
+                            event.get("market"),
+                        )
+                        self._wait_for_manual_close()
+                        return
+                    self._execute_event_trade(page, event, outcome)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logging.exception("Trade mode error: %s", exc)
+
+            self._sleep_until_next_minute()
+
+        logging.info("Stop requested; exiting trade mode without closing browser")
 
     def _execute(self, now: datetime) -> None:
         playwright = self._ensure_playwright()
@@ -148,6 +189,46 @@ class Worker:
             logging.warning("ensure_limit_mode failed but continuing: %s", exc)
         trade_page.select_side(self.config.side)
         logging.info("Selected side %s", self.config.side)
+
+    def _execute_event_trade(self, page: Page, event: dict[str, Any], outcome: str) -> None:
+        market = event.get("market")
+        if not market:
+            logging.warning("Event missing market; skipping trade")
+            return
+        price = event.get("price")
+        size = event.get("size")
+        if price is None or size is None:
+            logging.warning("Event missing price/size; skipping trade for market %s", market)
+            return
+        try:
+            limit_price_cents = round(float(price) * 100, 4)
+            shares = float(size)
+        except (TypeError, ValueError):
+            logging.warning("Event price/size not numeric; skipping trade for market %s", market)
+            return
+
+        url = f"{self.config.trade_event_url_base}{market}"
+        page.goto(url, wait_until="domcontentloaded")
+        logging.info("Opened event URL: %s", url)
+        trade_page = TradePage(page)
+        trade_page.ensure_widget_ready()
+        try:
+            trade_page.ensure_limit_mode()
+            logging.info("Limit mode check completed")
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logging.warning("ensure_limit_mode failed but continuing: %s", exc)
+        trade_page.select_side(outcome)
+        logging.info("Selected side %s", outcome)
+        trade_page.fill_limit_price(limit_price_cents)
+        logging.info("Filled limit price with %s", limit_price_cents)
+        trade_page.fill_shares(shares)
+        logging.info("Filled shares with %s", shares)
+        if not self.config.dry_run:
+            button = trade_page.trade_button()
+            button.click()
+            logging.info("Trade button clicked")
+        else:
+            logging.info("DRY_RUN enabled; not clicking trade button")
 
     def _should_pause(self, trade_page: TradePage, now: datetime) -> bool:
         try:
@@ -240,3 +321,37 @@ class Worker:
         except Exception:  # pylint: disable=broad-exception-caught
             logging.warning("Failed to start tracing")
 
+    def _read_latest_event(self, path: Path) -> Optional[dict[str, Any]]:
+        if not path.exists():
+            return None
+        try:
+            with path.open("r", encoding="utf-8") as file:
+                for line in file:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        return json.loads(line)
+                    except json.JSONDecodeError:
+                        logging.warning("Invalid JSON in %s; skipping line", path)
+                        return None
+        except OSError as exc:
+            logging.warning("Unable to read %s: %s", path, exc)
+        return None
+
+    def _sleep_until_next_minute(self) -> None:
+        interval = max(1, self.config.trade_poll_interval_seconds)
+        if interval != 60:
+            remaining = float(interval)
+            while not self._stop_requested() and remaining > 0:
+                sleep_for = min(remaining, 5)
+                time.sleep(sleep_for)
+                remaining -= sleep_for
+            return
+        while not self._stop_requested():
+            now = datetime.now(self.config.timezone)
+            target = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+            remaining = (target - now).total_seconds()
+            if remaining <= 0:
+                return
+            time.sleep(min(remaining, 5))
