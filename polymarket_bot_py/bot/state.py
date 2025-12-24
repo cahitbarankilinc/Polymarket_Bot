@@ -12,6 +12,7 @@ class BotState:
     last_bucket_key: Optional[str] = None
     pause_until_iso: Optional[str] = None
     last_event_line: int = 0
+    last_event_key: Optional[str] = None
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
