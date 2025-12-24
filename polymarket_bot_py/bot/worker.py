@@ -340,7 +340,7 @@ class Worker:
 
     def _sleep_until_next_minute(self) -> None:
         interval = max(1, self.config.trade_poll_interval_seconds)
-        if interval != 60:
+        if interval != 30:
             remaining = float(interval)
             while not self._stop_requested() and remaining > 0:
                 sleep_for = min(remaining, 5)
