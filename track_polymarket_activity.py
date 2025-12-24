@@ -75,7 +75,7 @@ class State:
 
 
 def utc_now_iso() -> str:
-    return dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc).isoformat()
+    return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
 def to_float(value: Any) -> Optional[float]:
