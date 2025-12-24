@@ -95,12 +95,11 @@ class Worker:
                     outcome = (event.get("outcome") or "").strip().upper()
                     if outcome not in {"UP", "DOWN"}:
                         logging.warning(
-                            "Unexpected outcome '%s' (event: %s); stopping trade loop without closing browser",
+                            "Unexpected outcome '%s' (event: %s); skipping this event",
                             outcome,
                             event.get("market"),
                         )
-                        self._wait_for_manual_close()
-                        return
+                        continue
                     self._execute_event_trade(page, event, outcome)
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logging.exception("Trade mode error: %s", exc)
@@ -334,7 +333,7 @@ class Worker:
                         return json.loads(line)
                     except json.JSONDecodeError:
                         logging.warning("Invalid JSON in %s; skipping line", path)
-                        return None
+                        continue
         except OSError as exc:
             logging.warning("Unable to read %s: %s", path, exc)
         return None
