@@ -26,6 +26,8 @@ class Config:
     slow_mo_ms: int
     runs_root: Path
     state_path: Path
+    events_ndjson_path: Path
+    tracker_script_path: Path
 
     @staticmethod
     def _get_bool(key: str, default: bool) -> bool:
@@ -51,6 +53,10 @@ class Config:
 
         runs_root = Path(os.getenv("RUNS_ROOT", "./runs")).resolve()
         state_path = Path(os.getenv("STATE_PATH", "./state.json")).resolve()
+        events_ndjson_path = Path(
+            os.getenv("EVENTS_NDJSON_PATH", "./polymarket_realtime_output/events.ndjson")
+        ).resolve()
+        tracker_script_path = Path(os.getenv("TRACKER_SCRIPT_PATH", "./track_polymarket_activity.py")).resolve()
 
         return Config(
             home_15m_url=os.getenv("HOME_15M_URL", "https://polymarket.com/crypto/15M"),
@@ -68,5 +74,6 @@ class Config:
             slow_mo_ms=int(os.getenv("SLOW_MO_MS", "0")),
             runs_root=runs_root,
             state_path=state_path,
+            events_ndjson_path=events_ndjson_path,
+            tracker_script_path=tracker_script_path,
         )
-
