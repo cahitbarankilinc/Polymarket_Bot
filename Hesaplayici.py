@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import requests
 
 ACTIVITY_URL = "https://data-api.polymarket.com/activity"
-DEFAULT_LIMIT = 100
+DEFAULT_LIMIT = 250
 OUTPUT_FILE = "hesaplayici_output.md"
 
 
@@ -53,9 +53,34 @@ def _init_stats() -> Dict[str, float]:
     return {"size": 0.0, "value_usd": 0.0, "event_count": 0.0}
 
 
+def _extract_size(event: Dict[str, Any]) -> Optional[float]:
+    return to_float(event.get("size") or event.get("amount") or event.get("shares"))
+
+
+def _extract_value_usd(event: Dict[str, Any], size: Optional[float] = None) -> Optional[float]:
+    value_usd = to_float(
+        event.get("value_usd")
+        or event.get("valueUSD")
+        or event.get("valueUsd")
+        or event.get("value")
+        or event.get("usdValue")
+        or event.get("usd_value")
+        or event.get("amountUSD")
+        or event.get("amountUsd")
+        or event.get("collateralValue")
+    )
+    if value_usd is not None:
+        return value_usd
+    price = to_float(event.get("price") or event.get("avgPrice"))
+    size = size if size is not None else _extract_size(event)
+    if price is not None and size is not None:
+        return price * size
+    return None
+
+
 def _update_stats(stats: Dict[str, float], event: Dict[str, Any]) -> None:
-    size = to_float(event.get("size") or event.get("amount") or event.get("shares"))
-    value_usd = to_float(event.get("value_usd") or event.get("valueUSD") or event.get("value"))
+    size = _extract_size(event)
+    value_usd = _extract_value_usd(event, size=size)
     stats["event_count"] += 1.0
     if size is not None:
         stats["size"] += size
@@ -79,6 +104,15 @@ def _print_day_summary(row: Dict[str, Any]) -> None:
     print(f"- Toplam value (USD): {row['total_value_usd']}")
 
 
+def _print_progress(total_events: int, offset: int, current_day: Optional[str]) -> None:
+    day_label = current_day or "-"
+    print(
+        f"\rKonum: offset={offset} | Aktif gun: {day_label} | Cekilen veri sayisi: {total_events}",
+        end="",
+        flush=True,
+    )
+
+
 def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
     rows: List[Dict[str, Any]] = []
     overall_stats = _init_stats()
@@ -86,11 +120,13 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
     cutoff = dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(days=7)
     current_day: Optional[str] = None
     current_stats = _init_stats()
+    total_events = 0
+    session = requests.Session()
 
     while True:
         params = {"user": address, "limit": DEFAULT_LIMIT, "offset": offset}
         try:
-            resp = requests.get(ACTIVITY_URL, params=params, timeout=15)
+            resp = session.get(ACTIVITY_URL, params=params, timeout=15)
         except Exception as exc:
             error_log.append(f"Request error: {exc}")
             break
@@ -119,6 +155,7 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
             break
 
         for item in payload:
+            total_events += 1
             event_time = parse_event_time(item)
             if event_time is None:
                 continue
@@ -142,7 +179,10 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
             _update_stats(overall_stats, item)
 
         offset += DEFAULT_LIMIT
+        _print_progress(total_events, offset, current_day)
 
+    if total_events:
+        print("")
     if current_day is not None:
         row = _finalize_row(current_day, current_stats)
         rows.append(row)
@@ -162,8 +202,8 @@ def summarize_by_day(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if day_key not in summary:
             summary[day_key] = {"size": 0.0, "value_usd": 0.0, "event_count": 0.0}
 
-        size = to_float(event.get("size") or event.get("amount") or event.get("shares"))
-        value_usd = to_float(event.get("value_usd") or event.get("valueUSD") or event.get("value"))
+        size = _extract_size(event)
+        value_usd = _extract_value_usd(event, size=size)
         summary[day_key]["event_count"] += 1.0
         if size is not None:
             summary[day_key]["size"] += size
