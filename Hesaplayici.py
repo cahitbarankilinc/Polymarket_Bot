@@ -150,7 +150,8 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
         progress_day = current_day or "-"
         print(
             f"Veri cekiliyor... sayfa: {page}, offset: {offset}, "
-            f"toplam eleman: {total_items}, aktif gun: {progress_day}"
+            f"toplam eleman: {total_items}, aktif gun: {progress_day}",
+            end="\r",
         )
         sys.stdout.flush()
 
@@ -183,6 +184,9 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
         row = _finalize_row(current_day, current_stats)
         rows.append(row)
         _print_day_summary(row)
+
+    if page > 0:
+        print()
 
     return rows, overall_stats
 
