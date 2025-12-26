@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
 
@@ -49,10 +49,43 @@ def parse_event_time(raw: Dict[str, Any]) -> Optional[dt.datetime]:
     return None
 
 
-def fetch_activity(address: str, error_log: List[str]) -> List[Dict[str, Any]]:
-    results: List[Dict[str, Any]] = []
+def _init_stats() -> Dict[str, float]:
+    return {"size": 0.0, "value_usd": 0.0, "event_count": 0.0}
+
+
+def _update_stats(stats: Dict[str, float], event: Dict[str, Any]) -> None:
+    size = to_float(event.get("size") or event.get("amount") or event.get("shares"))
+    value_usd = to_float(event.get("value_usd") or event.get("valueUSD") or event.get("value"))
+    stats["event_count"] += 1.0
+    if size is not None:
+        stats["size"] += size
+    if value_usd is not None:
+        stats["value_usd"] += value_usd
+
+
+def _finalize_row(day_key: str, stats: Dict[str, float]) -> Dict[str, Any]:
+    return {
+        "date": day_key,
+        "event_count": int(stats["event_count"]),
+        "total_size": round(stats["size"], 6),
+        "total_value_usd": round(stats["value_usd"], 6),
+    }
+
+
+def _print_day_summary(row: Dict[str, Any]) -> None:
+    print(f"\nGun tamamlandi: {row['date']}")
+    print(f"- Islem sayisi: {row['event_count']}")
+    print(f"- Toplam size: {row['total_size']}")
+    print(f"- Toplam value (USD): {row['total_value_usd']}")
+
+
+def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, Any]], Dict[str, float]]:
+    rows: List[Dict[str, Any]] = []
+    overall_stats = _init_stats()
     offset = 0
     cutoff = dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(days=7)
+    current_day: Optional[str] = None
+    current_stats = _init_stats()
 
     while True:
         params = {"user": address, "limit": DEFAULT_LIMIT, "offset": offset}
@@ -90,12 +123,32 @@ def fetch_activity(address: str, error_log: List[str]) -> List[Dict[str, Any]]:
             if event_time is None:
                 continue
             if event_time < cutoff:
-                return results
-            results.append(item)
+                if current_day is not None:
+                    row = _finalize_row(current_day, current_stats)
+                    rows.append(row)
+                    _print_day_summary(row)
+                return rows, overall_stats
+            day_key = event_time.date().isoformat()
+            if current_day is None:
+                current_day = day_key
+            elif day_key != current_day:
+                row = _finalize_row(current_day, current_stats)
+                rows.append(row)
+                _print_day_summary(row)
+                current_day = day_key
+                current_stats = _init_stats()
+
+            _update_stats(current_stats, item)
+            _update_stats(overall_stats, item)
 
         offset += DEFAULT_LIMIT
 
-    return results
+    if current_day is not None:
+        row = _finalize_row(current_day, current_stats)
+        rows.append(row)
+        _print_day_summary(row)
+
+    return rows, overall_stats
 
 
 def summarize_by_day(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -131,12 +184,24 @@ def summarize_by_day(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return rows
 
 
-def build_report(address: str, rows: List[Dict[str, Any]], errors: List[str]) -> str:
+def build_report(
+    address: str,
+    rows: List[Dict[str, Any]],
+    overall_stats: Dict[str, float],
+    errors: List[str],
+) -> str:
+    overall_row = _finalize_row("GENEL", overall_stats)
     lines = []
     lines.append("# Hesaplayici - Son 7 Gün Aktivite Özeti")
     lines.append("")
     lines.append(f"Adres: `{address}`")
     lines.append(f"Rapor zamanı (UTC): {dt.datetime.now(tz=dt.timezone.utc).isoformat()}")
+    lines.append("")
+    lines.append("## Genel Durum")
+    lines.append("")
+    lines.append(f"- Toplam islem sayisi: {overall_row['event_count']}")
+    lines.append(f"- Toplam size: {overall_row['total_size']}")
+    lines.append(f"- Toplam value (USD): {overall_row['total_value_usd']}")
     lines.append("")
     lines.append("| Gün | İşlem Sayısı | Toplam Size | Toplam Value (USD) |")
     lines.append("| --- | --- | --- | --- |")
@@ -167,10 +232,13 @@ def main() -> int:
         return 1
 
     errors: List[str] = []
-    events = fetch_activity(address, errors)
-    rows = summarize_by_day(events)
-    report = build_report(address, rows, errors)
+    rows, overall_stats = fetch_activity(address, errors)
+    report = build_report(address, rows, overall_stats, errors)
 
+    print("\nTum gunler tamamlandi. Genel durum:")
+    print(f"- Toplam islem sayisi: {int(overall_stats['event_count'])}")
+    print(f"- Toplam size: {round(overall_stats['size'], 6)}")
+    print(f"- Toplam value (USD): {round(overall_stats['value_usd'], 6)}")
     print(report)
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(report)
