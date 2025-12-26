@@ -148,11 +148,7 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
         page += 1
         total_items += len(payload)
         progress_day = current_day or "-"
-        print(
-            f"Veri cekiliyor... sayfa: {page}, offset: {offset}, "
-            f"toplam eleman: {total_items}, aktif gun: {progress_day}",
-            end="\r",
-        )
+        print(f"Toplanan veri: {total_items}", end="\r")
         sys.stdout.flush()
 
         for item in payload:
