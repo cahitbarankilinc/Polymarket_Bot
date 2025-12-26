@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import sys
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import requests
 
 ACTIVITY_URL = "https://data-api.polymarket.com/activity"
-DEFAULT_LIMIT = 100
+DEFAULT_LIMIT = 500
 OUTPUT_FILE = "hesaplayici_output.md"
 
 
@@ -53,9 +54,32 @@ def _init_stats() -> Dict[str, float]:
     return {"size": 0.0, "value_usd": 0.0, "event_count": 0.0}
 
 
+def _extract_size(event: Dict[str, Any]) -> Optional[float]:
+    return to_float(event.get("size") or event.get("amount") or event.get("shares"))
+
+
+def _extract_price(event: Dict[str, Any]) -> Optional[float]:
+    return to_float(event.get("price") or event.get("avgPrice"))
+
+
+def _extract_value_usd(event: Dict[str, Any], size: Optional[float], price: Optional[float]) -> Optional[float]:
+    value_usd = to_float(
+        event.get("value_usd")
+        or event.get("valueUSD")
+        or event.get("valueUsd")
+        or event.get("value")
+        or event.get("amountUSD")
+        or event.get("amountUsd")
+    )
+    if value_usd is None and size is not None and price is not None:
+        value_usd = price * size
+    return value_usd
+
+
 def _update_stats(stats: Dict[str, float], event: Dict[str, Any]) -> None:
-    size = to_float(event.get("size") or event.get("amount") or event.get("shares"))
-    value_usd = to_float(event.get("value_usd") or event.get("valueUSD") or event.get("value"))
+    size = _extract_size(event)
+    price = _extract_price(event)
+    value_usd = _extract_value_usd(event, size, price)
     stats["event_count"] += 1.0
     if size is not None:
         stats["size"] += size
@@ -83,14 +107,17 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
     rows: List[Dict[str, Any]] = []
     overall_stats = _init_stats()
     offset = 0
+    page = 0
+    total_items = 0
     cutoff = dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(days=7)
     current_day: Optional[str] = None
     current_stats = _init_stats()
+    session = requests.Session()
 
     while True:
         params = {"user": address, "limit": DEFAULT_LIMIT, "offset": offset}
         try:
-            resp = requests.get(ACTIVITY_URL, params=params, timeout=15)
+            resp = session.get(ACTIVITY_URL, params=params, timeout=15)
         except Exception as exc:
             error_log.append(f"Request error: {exc}")
             break
@@ -117,6 +144,15 @@ def fetch_activity(address: str, error_log: List[str]) -> Tuple[List[Dict[str, A
 
         if not payload:
             break
+
+        page += 1
+        total_items += len(payload)
+        progress_day = current_day or "-"
+        print(
+            f"Veri cekiliyor... sayfa: {page}, offset: {offset}, "
+            f"toplam eleman: {total_items}, aktif gun: {progress_day}"
+        )
+        sys.stdout.flush()
 
         for item in payload:
             event_time = parse_event_time(item)
@@ -162,8 +198,9 @@ def summarize_by_day(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if day_key not in summary:
             summary[day_key] = {"size": 0.0, "value_usd": 0.0, "event_count": 0.0}
 
-        size = to_float(event.get("size") or event.get("amount") or event.get("shares"))
-        value_usd = to_float(event.get("value_usd") or event.get("valueUSD") or event.get("value"))
+        size = _extract_size(event)
+        price = _extract_price(event)
+        value_usd = _extract_value_usd(event, size, price)
         summary[day_key]["event_count"] += 1.0
         if size is not None:
             summary[day_key]["size"] += size
