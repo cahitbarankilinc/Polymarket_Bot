@@ -7,7 +7,6 @@ from typing import Optional
 
 from activity_poller import ActivityPoller
 from copier import Copier
-from dashboard import Dashboard, DashboardData
 from market_session import MarketSession
 from paper_broker import PaperBroker
 from ws_price_feed import WsPriceFeed
@@ -69,7 +68,7 @@ async def main() -> None:
     broker = PaperBroker(output_dir=OUTPUT_DIR)
     copier = Copier(price_feed, broker, share_rate, slippage_bps=args.slippage_bps)
     market_session = MarketSession(price_feed, session_path=str(session_path))
-    dashboard = Dashboard()
+    metrics_path = OUTPUT_DIR / "metrics.json"
 
     await market_session.start()
 
@@ -88,20 +87,37 @@ async def main() -> None:
                 pass
             await copier.check_pending()
 
-    async def dashboard_loop() -> None:
+    async def metrics_loop() -> None:
         while True:
             broker.update_unrealized(price_feed.cache.yes.best_bid, price_feed.cache.no.best_bid)
-            data = DashboardData(
-                market=market_session.active_market,
-                price_feed=price_feed,
-                events=poller.latest_events(limit=20),
-                copier=copier,
-                broker=broker,
-            )
-            dashboard.render(data)
+            market = market_session.active_market
+            payload = {
+                "market": {
+                    "market_id": market.market_id if market else None,
+                    "question": market.question if market else None,
+                    "end_time": market.end_time.isoformat() if market else None,
+                    "yes_token_id": market.yes_token_id if market else None,
+                    "no_token_id": market.no_token_id if market else None,
+                },
+                "prices": {
+                    "yes": {
+                        "best_bid": price_feed.cache.yes.best_bid,
+                        "best_ask": price_feed.cache.yes.best_ask,
+                    },
+                    "no": {
+                        "best_bid": price_feed.cache.no.best_bid,
+                        "best_ask": price_feed.cache.no.best_ask,
+                    },
+                },
+                "events": [event.__dict__ for event in poller.latest_events(limit=20)],
+                "copier": copier.snapshot(),
+                "broker": broker.snapshot(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            metrics_path.write_text(json.dumps(payload, indent=2))
             await asyncio.sleep(args.dashboard_refresh_seconds)
 
-    await asyncio.gather(poll_loop(), copy_loop(), dashboard_loop())
+    await asyncio.gather(poll_loop(), copy_loop(), metrics_loop())
 
 
 if __name__ == "__main__":

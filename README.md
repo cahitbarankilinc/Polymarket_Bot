@@ -17,7 +17,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Run
+## Run (collector)
 ```bash
 python main.py --watched-address 0xYOURADDRESS --individual-share-rate 0.1
 ```
@@ -37,11 +37,18 @@ python main.py --watched-address 0xYOURADDRESS --individual-share-rate 0.1 --sli
 python main.py --watched-address 0xYOURADDRESS --individual-share-rate 0.1 --replay-path output/events.ndjson
 ```
 
+## Streamlit dashboard
+Run the collector first, then start the dashboard in another terminal:
+```bash
+streamlit run streamlit_app.py
+```
+
 ## Output files
 - `output/events.ndjson` — normalized address activity events
 - `output/paper_trades.ndjson` — executed/missed paper trades
 - `output/state.json` — dedup state
 - `output/session.json` — session inputs + timestamps
+- `output/metrics.json` — live metrics for the Streamlit dashboard
 
 ## Notes
 - This project **does not** place real trades or require private keys.

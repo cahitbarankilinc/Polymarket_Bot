@@ -199,3 +199,15 @@ class Copier:
         if not self.stats.slippage_samples:
             return 0.0
         return sum(self.stats.slippage_samples) / len(self.stats.slippage_samples)
+
+    def snapshot(self) -> dict:
+        min_lat, avg_lat, max_lat = self.latency_stats()
+        return {
+            "executed": self.stats.executed,
+            "missed": self.stats.missed,
+            "fill_rate": (self.stats.executed / (self.stats.executed + self.stats.missed))
+            if (self.stats.executed + self.stats.missed)
+            else 0.0,
+            "slippage_avg": self.slippage_avg(),
+            "latency": {"min": min_lat, "avg": avg_lat, "max": max_lat},
+        }

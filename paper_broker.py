@@ -73,3 +73,19 @@ class PaperBroker:
         self.trades.append(record)
         with self.output_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record.__dict__) + "\n")
+
+    def snapshot(self) -> dict:
+        return {
+            "positions": {
+                "YES": {"qty": self.positions["YES"].qty, "avg_price": self.positions["YES"].avg_price},
+                "NO": {"qty": self.positions["NO"].qty, "avg_price": self.positions["NO"].avg_price},
+            },
+            "pnl": {
+                "realized": self.pnl.realized,
+                "unrealized": self.pnl.unrealized,
+                "total_spent": self.pnl.total_spent,
+                "total_received": self.pnl.total_received,
+                "total_shares_bought": self.pnl.total_shares_bought,
+                "total_shares_sold": self.pnl.total_shares_sold,
+            },
+        }
