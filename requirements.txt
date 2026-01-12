@@ -1,0 +1,6 @@
+aiohttp>=3.9.0
+websockets>=12.0
+python-dateutil>=2.9.0
+pytz>=2024.1
+rich>=13.7.0
+streamlit>=1.32.0
