@@ -12,7 +12,9 @@ import requests
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-from .config import AppConfig, load_session_config
+import os, sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from app.config import AppConfig, load_session_config
 
 DEFAULT_API_HOST = os.environ.get("POLY_API_HOST", "localhost")
 DEFAULT_API_PORT = int(os.environ.get("POLY_API_PORT", "8765"))
