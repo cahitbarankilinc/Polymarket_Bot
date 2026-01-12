@@ -18,8 +18,8 @@ DEFAULT_API_HOST = os.environ.get("POLY_API_HOST", "localhost")
 DEFAULT_API_PORT = int(os.environ.get("POLY_API_PORT", "8765"))
 
 
-def _start_backend(host: str, port: int) -> None:
-    if st.session_state.get("backend_started"):
+def _start_backend(host: str, port: int, force: bool = False) -> None:
+    if st.session_state.get("backend_started") and not force:
         return
     env = os.environ.copy()
     env["POLY_API_HOST"] = host
@@ -32,10 +32,13 @@ def _start_backend(host: str, port: int) -> None:
     )
     st.session_state["backend_started"] = True
     st.session_state["backend_pid"] = process.pid
+    st.session_state["backend_host"] = host
+    st.session_state["backend_port"] = port
 
 
 def _api_url(host: str, port: int) -> str:
-    return f"http://{host}:{port}"
+    client_host = "localhost" if host in {"0.0.0.0", "::"} else host
+    return f"http://{client_host}:{port}"
 
 
 def _get_json(host: str, port: int, path: str) -> Dict[str, Any]:
@@ -95,10 +98,16 @@ with st.sidebar:
     slippage_bps = st.number_input("slippage_bps", min_value=0.0, value=session_config.slippage_bps)
     api_host = st.text_input("api_host", session_config.api_host or DEFAULT_API_HOST)
     api_port = st.number_input("api_port", min_value=1024, value=session_config.api_port or DEFAULT_API_PORT)
+    if api_host.strip() in {"0.0.0.0", "::"}:
+        st.caption("macOS için istemci erişimi localhost üzerinden yapılır; 0.0.0.0 sadece bind içindir.")
 
     if st.button("Apply"):
-        _start_backend(api_host.strip() or DEFAULT_API_HOST, int(api_port))
-        if not _wait_for_backend(api_host.strip() or DEFAULT_API_HOST, int(api_port)):
+        apply_host = api_host.strip() or DEFAULT_API_HOST
+        apply_port = int(api_port)
+        _start_backend(apply_host, apply_port)
+        if not _wait_for_backend(apply_host, apply_port):
+            _start_backend(apply_host, apply_port, force=True)
+        if not _wait_for_backend(apply_host, apply_port):
             st.error("Backend başlatılamadı veya /health erişilemedi. Port çakışması olabilir.")
             st.stop()
         config = AppConfig(
@@ -111,8 +120,8 @@ with st.sidebar:
             slippage_enabled=slippage_enabled,
             slippage_bps=float(slippage_bps),
             replay_path=None,
-            api_host=api_host.strip() or DEFAULT_API_HOST,
-            api_port=int(api_port),
+            api_host=apply_host,
+            api_port=apply_port,
         )
         try:
             _post_json(config.api_host, config.api_port, "/config", config.to_dict())
@@ -134,6 +143,8 @@ try:
 except Exception:
     connection_ok = False
     _start_backend(api_host, api_port)
+    if not _wait_for_backend(api_host, api_port):
+        _start_backend(api_host, api_port, force=True)
     if not _wait_for_backend(api_host, api_port):
         st.warning("Backend henüz hazır değil veya erişilemiyor. Lütfen portu kontrol edin.")
         state = {}
