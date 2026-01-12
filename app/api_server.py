@@ -14,6 +14,9 @@ def _parse_config(payload: dict) -> AppConfig:
 def create_app(state: StateStore) -> web.Application:
     app = web.Application()
 
+    async def get_health(request: web.Request) -> web.Response:
+        return web.json_response({"status": "ok"})
+
     async def get_state(request: web.Request) -> web.Response:
         snapshot = await state.snapshot()
         return web.json_response(snapshot)
@@ -39,5 +42,6 @@ def create_app(state: StateStore) -> web.Application:
     app.router.add_get("/events", get_events)
     app.router.add_get("/orders", get_orders)
     app.router.add_post("/config", post_config)
+    app.router.add_get("/health", get_health)
 
     return app

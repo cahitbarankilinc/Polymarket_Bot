@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -49,6 +50,18 @@ def _post_json(host: str, port: int, path: str, payload: Dict[str, Any]) -> Dict
     return resp.json()
 
 
+def _wait_for_backend(host: str, port: int, timeout_s: float = 8.0) -> bool:
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            resp = requests.get(f"{_api_url(host, port)}/health", timeout=2)
+            if resp.status_code == 200:
+                return True
+        except Exception:
+            time.sleep(0.5)
+    return False
+
+
 def _parse_time(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -85,6 +98,9 @@ with st.sidebar:
 
     if st.button("Apply"):
         _start_backend(api_host.strip() or DEFAULT_API_HOST, int(api_port))
+        if not _wait_for_backend(api_host.strip() or DEFAULT_API_HOST, int(api_port)):
+            st.error("Backend başlatılamadı veya /health erişilemedi. Port çakışması olabilir.")
+            st.stop()
         config = AppConfig(
             watched_address=watched_address.strip(),
             individual_share_rate=float(share_rate),
@@ -118,7 +134,11 @@ try:
 except Exception:
     connection_ok = False
     _start_backend(api_host, api_port)
-    state = {}
+    if not _wait_for_backend(api_host, api_port):
+        st.warning("Backend henüz hazır değil veya erişilemiyor. Lütfen portu kontrol edin.")
+        state = {}
+    else:
+        state = _get_json(api_host, api_port, "/state")
 
 header = st.container()
 
