@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 # Inspired by paper_trading_ByBaran.py: async orchestration of WS + paper order fills.
 
+TARGET_MARKET_KEYWORD = "btc-updown-15m"
+
 @dataclass
 class PendingOrder:
     order_id: str
@@ -83,6 +85,9 @@ class CopyEngine:
         return None
 
     async def handle_source_event(self, event: Dict[str, object]) -> None:
+        market_label = str(event.get("market") or "").lower()
+        if TARGET_MARKET_KEYWORD not in market_label:
+            return
         side = _normalize_side(event.get("side"))
         outcome = _normalize_outcome(event.get("outcome"))
         price = _parse_float(event.get("price"))
