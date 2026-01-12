@@ -67,6 +67,7 @@ with st.sidebar:
     slippage_bps = st.number_input("slippage_bps", min_value=0.0, value=session_config.slippage_bps)
 
     if st.button("Apply"):
+        _start_backend()
         config = AppConfig(
             watched_address=watched_address.strip(),
             individual_share_rate=float(share_rate),
@@ -83,6 +84,8 @@ with st.sidebar:
             st.success("Config updated")
         except Exception as exc:
             st.error(f"Config update failed: {exc}")
+    if not watched_address:
+        st.warning("watched_address boş. Copy orders oluşması için adres girip Apply yapın.")
 
 
 autorefresh_interval = int(refresh_seconds) * 1000
