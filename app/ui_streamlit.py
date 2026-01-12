@@ -5,31 +5,46 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+import os
+
 import requests
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
 from .config import AppConfig, load_session_config
 
-API_URL = "http://localhost:8765"
+DEFAULT_API_HOST = os.environ.get("POLY_API_HOST", "localhost")
+DEFAULT_API_PORT = int(os.environ.get("POLY_API_PORT", "8765"))
 
 
-def _start_backend() -> None:
+def _start_backend(host: str, port: int) -> None:
     if st.session_state.get("backend_started"):
         return
-    process = subprocess.Popen([sys.executable, "-m", "app.main"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    env = os.environ.copy()
+    env["POLY_API_HOST"] = host
+    env["POLY_API_PORT"] = str(port)
+    process = subprocess.Popen(
+        [sys.executable, "-m", "app.main"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
+    )
     st.session_state["backend_started"] = True
     st.session_state["backend_pid"] = process.pid
 
 
-def _get_json(path: str) -> Dict[str, Any]:
-    resp = requests.get(f"{API_URL}{path}", timeout=5)
+def _api_url(host: str, port: int) -> str:
+    return f"http://{host}:{port}"
+
+
+def _get_json(host: str, port: int, path: str) -> Dict[str, Any]:
+    resp = requests.get(f"{_api_url(host, port)}{path}", timeout=5)
     resp.raise_for_status()
     return resp.json()
 
 
-def _post_json(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-    resp = requests.post(f"{API_URL}{path}", json=payload, timeout=5)
+def _post_json(host: str, port: int, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    resp = requests.post(f"{_api_url(host, port)}{path}", json=payload, timeout=5)
     resp.raise_for_status()
     return resp.json()
 
@@ -65,9 +80,11 @@ with st.sidebar:
     order_ttl = st.number_input("order_ttl_seconds", min_value=1, value=session_config.order_ttl_seconds)
     slippage_enabled = st.checkbox("slippage_enabled", value=session_config.slippage_enabled)
     slippage_bps = st.number_input("slippage_bps", min_value=0.0, value=session_config.slippage_bps)
+    api_host = st.text_input("api_host", session_config.api_host or DEFAULT_API_HOST)
+    api_port = st.number_input("api_port", min_value=1024, value=session_config.api_port or DEFAULT_API_PORT)
 
     if st.button("Apply"):
-        _start_backend()
+        _start_backend(api_host.strip() or DEFAULT_API_HOST, int(api_port))
         config = AppConfig(
             watched_address=watched_address.strip(),
             individual_share_rate=float(share_rate),
@@ -78,9 +95,11 @@ with st.sidebar:
             slippage_enabled=slippage_enabled,
             slippage_bps=float(slippage_bps),
             replay_path=None,
+            api_host=api_host.strip() or DEFAULT_API_HOST,
+            api_port=int(api_port),
         )
         try:
-            _post_json("/config", config.to_dict())
+            _post_json(config.api_host, config.api_port, "/config", config.to_dict())
             st.success("Config updated")
         except Exception as exc:
             st.error(f"Config update failed: {exc}")
@@ -93,10 +112,12 @@ st_autorefresh(interval=autorefresh_interval, key="dashboard_refresh")
 
 connection_ok = True
 try:
-    state = _get_json("/state")
+    api_host = session_config.api_host or DEFAULT_API_HOST
+    api_port = session_config.api_port or DEFAULT_API_PORT
+    state = _get_json(api_host, api_port, "/state")
 except Exception:
     connection_ok = False
-    _start_backend()
+    _start_backend(api_host, api_port)
     state = {}
 
 header = st.container()
@@ -134,7 +155,7 @@ cols = st.columns(2)
 with cols[0]:
     st.subheader("Watched Address Events")
     try:
-        events = _get_json("/events?limit=20").get("events", [])
+        events = _get_json(api_host, api_port, "/events?limit=20").get("events", [])
     except Exception:
         events = []
     st.dataframe(events, use_container_width=True, hide_index=True)
@@ -142,7 +163,7 @@ with cols[0]:
 with cols[1]:
     st.subheader("Copy Orders")
     try:
-        orders = _get_json("/orders?limit=50").get("orders", [])
+        orders = _get_json(api_host, api_port, "/orders?limit=50").get("orders", [])
     except Exception:
         orders = []
     st.dataframe(orders, use_container_width=True, hide_index=True)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+import os
 
 from aiohttp import web
 
@@ -33,22 +33,28 @@ async def _apply_market(state: StateStore, market: MarketDiscoveryResult) -> Non
     logger.info("Market updated: %s", market.title)
 
 
-async def _start_api(state: StateStore, host: str = "0.0.0.0", port: int = 8765) -> web.AppRunner:
+async def _start_api(state: StateStore, host: str, port: int) -> web.AppRunner:
     app = create_app(state)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host=host, port=port)
-    await site.start()
+    try:
+        await site.start()
+    except OSError as exc:
+        logger.error("API bind failed on %s:%s (%s).", host, port, exc)
+        raise
     logger.info("API server listening on %s:%s", host, port)
     return runner
 
 
 async def main() -> None:
     config = load_session_config()
+    config.api_host = os.environ.get("POLY_API_HOST", config.api_host)
+    config.api_port = int(os.environ.get("POLY_API_PORT", config.api_port))
     state = StateStore(config)
     stop_event = asyncio.Event()
 
-    runner = await _start_api(state)
+    runner = await _start_api(state, config.api_host, config.api_port)
 
     async with asyncio.TaskGroup() as tg:
         tg.create_task(discovery_loop(lambda market: _apply_market(state, market), stop_event))

@@ -43,6 +43,8 @@ In this mode, keep the backend running and open the UI in another terminal:
 streamlit run app/ui_streamlit.py
 ```
 
+If you see an error like `address already in use`, either stop the existing backend process or set a different port via `POLY_API_PORT` or the Streamlit sidebar `api_port` field.
+
 ## Output Files
 
 All runtime files are created under `output/`:

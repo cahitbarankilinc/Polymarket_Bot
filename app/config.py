@@ -20,6 +20,8 @@ class AppConfig:
     slippage_enabled: bool = False
     slippage_bps: float = 0.0
     replay_path: Optional[str] = None
+    api_host: str = "0.0.0.0"
+    api_port: int = 8765
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
