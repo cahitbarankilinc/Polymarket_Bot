@@ -1,0 +1,7 @@
+aiohttp
+websockets
+streamlit
+streamlit-autorefresh
+python-dateutil
+pytz
+requests
