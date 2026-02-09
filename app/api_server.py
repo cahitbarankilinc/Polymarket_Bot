@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
 from aiohttp import web
 
 from .config import AppConfig, save_session_config
@@ -11,8 +13,14 @@ def _parse_config(payload: dict) -> AppConfig:
     return AppConfig(**payload)
 
 
+STATIC_DIR = Path(__file__).parent / "static"
+
+
 def create_app(state: StateStore) -> web.Application:
     app = web.Application()
+
+    async def get_index(request: web.Request) -> web.Response:
+        return web.FileResponse(STATIC_DIR / "dashboard.html")
 
     async def get_health(request: web.Request) -> web.Response:
         return web.json_response({"status": "ok"})
@@ -38,6 +46,9 @@ def create_app(state: StateStore) -> web.Application:
         save_session_config(config)
         return web.json_response({"status": "ok", "config": config.to_dict()})
 
+    app.router.add_get("/", get_index)
+    app.router.add_get("/dashboard", get_index)
+    app.router.add_static("/static/", STATIC_DIR)
     app.router.add_get("/state", get_state)
     app.router.add_get("/events", get_events)
     app.router.add_get("/orders", get_orders)
