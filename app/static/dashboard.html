@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Polymarket Copy Trader Dashboard</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+        background: #0b0f1a;
+        color: #e6eaf2;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: radial-gradient(circle at top, #1a1f2e, #0b0f1a 55%);
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        font-size: 24px;
+        margin: 0;
+      }
+      .status-pill {
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: #1f2a44;
+        color: #8ab4ff;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+      }
+      .grid-2 {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+      .grid-3 {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      }
+      .grid-4 {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+      .card {
+        background: rgba(17, 24, 39, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      }
+      .card h2 {
+        font-size: 16px;
+        margin: 0 0 12px;
+        color: #cbd5f5;
+      }
+      .metric {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .metric span {
+        font-size: 12px;
+        color: #9aa4b2;
+      }
+      .metric strong {
+        font-size: 18px;
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .table th,
+      .table td {
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+      }
+      .table th {
+        color: #9aa4b2;
+        font-weight: 600;
+      }
+      .muted {
+        color: #94a3b8;
+        font-size: 12px;
+      }
+      form {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px;
+        align-items: end;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 12px;
+        color: #a5b4fc;
+      }
+      input,
+      select {
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 8px;
+        font-size: 12px;
+      }
+      button {
+        background: linear-gradient(120deg, #3b82f6, #6366f1);
+        color: white;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .banner {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #fbbf24;
+      }
+      .kpi-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Polymarket Copy Trader Dashboard</h1>
+        <div class="muted">HTML + REST API dashboard</div>
+      </div>
+      <div class="status-pill" id="connectionStatus">Bağlantı: kontrol ediliyor...</div>
+    </header>
+
+    <section class="grid grid-2">
+      <div class="card">
+        <h2>Market</h2>
+        <div class="metric"><span>Market adı</span><strong id="marketName">-</strong></div>
+        <div class="metric"><span>Market ID</span><strong id="marketId">-</strong></div>
+        <div class="metric"><span>End time</span><strong id="marketEnd">-</strong></div>
+        <div class="metric"><span>Kalan süre</span><strong id="marketCountdown">-</strong></div>
+      </div>
+      <div class="card">
+        <h2>Config</h2>
+        <form id="configForm">
+          <label>
+            watched_address
+            <input name="watched_address" />
+          </label>
+          <label>
+            individual_share_rate
+            <input name="individual_share_rate" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            poll_interval_seconds
+            <input name="poll_interval_seconds" type="number" min="1" step="1" />
+          </label>
+          <label>
+            max_events_buffer
+            <input name="max_events_buffer" type="number" min="50" step="1" />
+          </label>
+          <label>
+            dashboard_refresh_seconds
+            <input name="dashboard_refresh_seconds" type="number" min="1" step="1" />
+          </label>
+          <label>
+            order_ttl_seconds
+            <input name="order_ttl_seconds" type="number" min="1" step="1" />
+          </label>
+          <label>
+            slippage_enabled
+            <select name="slippage_enabled">
+              <option value="true">true</option>
+              <option value="false">false</option>
+            </select>
+          </label>
+          <label>
+            slippage_bps
+            <input name="slippage_bps" type="number" min="0" step="0.1" />
+          </label>
+          <button type="submit">Apply</button>
+        </form>
+        <div class="banner" id="configMessage"></div>
+      </div>
+    </section>
+
+    <section class="grid grid-2" style="margin-top: 16px;">
+      <div class="card">
+        <h2>Price Snapshots</h2>
+        <div class="grid grid-2">
+          <div class="metric">
+            <span>YES Best Bid</span><strong id="yesBestBid">-</strong>
+            <span>YES Best Ask</span><strong id="yesBestAsk">-</strong>
+            <span class="muted" id="yesUpdate">-</span>
+          </div>
+          <div class="metric">
+            <span>NO Best Bid</span><strong id="noBestBid">-</strong>
+            <span>NO Best Ask</span><strong id="noBestAsk">-</strong>
+            <span class="muted" id="noUpdate">-</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>KPIs</h2>
+        <div class="kpi-grid">
+          <div class="metric"><span>Source Trades</span><strong id="kpiSource">-</strong></div>
+          <div class="metric"><span>Orders Created</span><strong id="kpiOrders">-</strong></div>
+          <div class="metric"><span>Fill Rate</span><strong id="kpiFillRate">-</strong></div>
+          <div class="metric"><span>Realized PnL</span><strong id="kpiRealized">-</strong></div>
+          <div class="metric"><span>Cash Spent</span><strong id="kpiSpent">-</strong></div>
+          <div class="metric"><span>Cash Received</span><strong id="kpiReceived">-</strong></div>
+          <div class="metric"><span>Unrealized PnL</span><strong id="kpiUnrealized">-</strong></div>
+          <div class="metric"><span>Total PnL</span><strong id="kpiTotal">-</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid grid-2" style="margin-top: 16px;">
+      <div class="card">
+        <h2>Watched Address Events</h2>
+        <table class="table" id="eventsTable">
+          <thead>
+            <tr>
+              <th>timestamp</th>
+              <th>type</th>
+              <th>side</th>
+              <th>price</th>
+              <th>size</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Copy Orders</h2>
+        <table class="table" id="ordersTable">
+          <thead>
+            <tr>
+              <th>timestamp</th>
+              <th>side</th>
+              <th>price</th>
+              <th>size</th>
+              <th>status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <script>
+      const stateUrl = "/state";
+      const eventsUrl = "/events?limit=20";
+      const ordersUrl = "/orders?limit=50";
+      const configUrl = "/config";
+
+      let refreshHandle = null;
+
+      const formatNumber = (value) => {
+        if (value === null || value === undefined || value === "") return "-";
+        if (typeof value === "number") return value.toFixed(4);
+        return value;
+      };
+
+      const formatCurrency = (value) => {
+        if (value === null || value === undefined) return "-";
+        return `$${Number(value).toFixed(2)}`;
+      };
+
+      const timeRemaining = (iso) => {
+        if (!iso) return "-";
+        const end = new Date(iso);
+        const now = new Date();
+        const diff = Math.max(0, Math.floor((end - now) / 1000));
+        return `${diff}s`;
+      };
+
+      const updateTable = (tableId, rows, columns) => {
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = "";
+        rows.forEach((row) => {
+          const tr = document.createElement("tr");
+          columns.forEach((col) => {
+            const td = document.createElement("td");
+            td.textContent = row[col] ?? "-";
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      };
+
+      const loadState = async () => {
+        const response = await fetch(stateUrl);
+        if (!response.ok) {
+          throw new Error("state fetch failed");
+        }
+        return response.json();
+      };
+
+      const loadList = async (url) => {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error("list fetch failed");
+        }
+        return response.json();
+      };
+
+      const renderState = (state) => {
+        document.getElementById("connectionStatus").textContent = "Bağlantı: online";
+        const market = state.market || {};
+        document.getElementById("marketName").textContent = market.market_name || "-";
+        document.getElementById("marketId").textContent = market.market_id || "-";
+        document.getElementById("marketEnd").textContent = market.end_time || "-";
+        document.getElementById("marketCountdown").textContent = timeRemaining(market.end_time);
+
+        const prices = state.price_cache || {};
+        const yes = prices.YES || {};
+        const no = prices.NO || {};
+        document.getElementById("yesBestBid").textContent = formatNumber(yes.best_bid);
+        document.getElementById("yesBestAsk").textContent = formatNumber(yes.best_ask);
+        document.getElementById("yesUpdate").textContent = yes.last_update_utc || "-";
+        document.getElementById("noBestBid").textContent = formatNumber(no.best_bid);
+        document.getElementById("noBestAsk").textContent = formatNumber(no.best_ask);
+        document.getElementById("noUpdate").textContent = no.last_update_utc || "-";
+
+        const stats = (state.paper || {}).stats || {};
+        const executed = stats.total_trades_executed || 0;
+        const missed = stats.total_trades_missed || 0;
+        const fillRate = executed + missed > 0 ? (executed / (executed + missed)) * 100 : 0;
+
+        document.getElementById("kpiSource").textContent = stats.total_trades_source ?? "-";
+        document.getElementById("kpiOrders").textContent = stats.total_orders_created ?? "-";
+        document.getElementById("kpiFillRate").textContent = `${fillRate.toFixed(1)}%`;
+        document.getElementById("kpiRealized").textContent = formatCurrency((state.paper || {}).realized_pnl_usd);
+        document.getElementById("kpiSpent").textContent = formatCurrency((state.paper || {}).cash_spent_usd);
+        document.getElementById("kpiReceived").textContent = formatCurrency((state.paper || {}).cash_received_usd);
+        document.getElementById("kpiUnrealized").textContent = formatCurrency((state.paper || {}).unrealized_pnl_usd);
+        document.getElementById("kpiTotal").textContent = formatCurrency((state.paper || {}).total_pnl_usd);
+
+        const config = state.config || {};
+        for (const [key, value] of Object.entries(config)) {
+          const input = document.querySelector(`[name="${key}"]`);
+          if (!input) continue;
+          if (input.tagName === "SELECT") {
+            input.value = String(value);
+          } else {
+            input.value = value ?? "";
+          }
+        }
+
+        if (refreshHandle) {
+          clearInterval(refreshHandle);
+        }
+        const refreshMs = Math.max(1, config.dashboard_refresh_seconds || 3) * 1000;
+        refreshHandle = setInterval(refreshAll, refreshMs);
+      };
+
+      const renderEvents = (payload) => {
+        const events = payload.events || [];
+        updateTable("eventsTable", events, ["timestamp", "type", "side", "price", "size"]);
+      };
+
+      const renderOrders = (payload) => {
+        const orders = payload.orders || [];
+        updateTable("ordersTable", orders, ["timestamp", "side", "price", "size", "status"]);
+      };
+
+      const refreshAll = async () => {
+        try {
+          const [state, events, orders] = await Promise.all([
+            loadState(),
+            loadList(eventsUrl),
+            loadList(ordersUrl),
+          ]);
+          renderState(state);
+          renderEvents(events);
+          renderOrders(orders);
+        } catch (error) {
+          document.getElementById("connectionStatus").textContent = "Bağlantı: offline";
+        }
+      };
+
+      document.getElementById("configForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const payload = Object.fromEntries(formData.entries());
+        payload.individual_share_rate = Number(payload.individual_share_rate || 0);
+        payload.poll_interval_seconds = Number(payload.poll_interval_seconds || 1);
+        payload.max_events_buffer = Number(payload.max_events_buffer || 50);
+        payload.dashboard_refresh_seconds = Number(payload.dashboard_refresh_seconds || 3);
+        payload.order_ttl_seconds = Number(payload.order_ttl_seconds || 5);
+        payload.slippage_bps = Number(payload.slippage_bps || 0);
+        payload.slippage_enabled = payload.slippage_enabled === "true";
+        payload.replay_path = null;
+        payload.api_host = window.location.hostname || "localhost";
+        payload.api_port = Number(window.location.port || 8765);
+        const response = await fetch(configUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const banner = document.getElementById("configMessage");
+        if (response.ok) {
+          banner.textContent = "Config updated";
+        } else {
+          banner.textContent = "Config update failed";
+        }
+        setTimeout(() => {
+          banner.textContent = "";
+        }, 4000);
+      });
+
+      refreshAll();
+    </script>
+  </body>
+</html>

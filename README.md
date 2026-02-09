@@ -1,6 +1,6 @@
 # Polymarket Copy Trader (Paper)
 
-This project provides a **paper trading** copy engine for Polymarket wallet activity. It polls the public activity/trades APIs, discovers the active 15-minute Bitcoin market, subscribes to the CLOB WebSocket for live prices, and simulates limit fills with a TTL. The dashboard is a Streamlit UI powered by a lightweight local REST API.
+This project provides a **paper trading** copy engine for Polymarket wallet activity. It polls the public activity/trades APIs, discovers the active 15-minute Bitcoin market, subscribes to the CLOB WebSocket for live prices, and simulates limit fills with a TTL. The dashboard is a lightweight HTML UI powered by a local REST API.
 
 > ⚠️ **No real trades.** There are no private keys or signing. This is a simulation only.
 
@@ -11,7 +11,7 @@ This project provides a **paper trading** copy engine for Polymarket wallet acti
 - Live YES/NO best bid/ask via WebSocket.
 - Paper copy engine with limit + TTL fill simulation.
 - KPI tracking (fill rate, PnL, latency, slippage).
-- Streamlit dashboard UI.
+- HTML dashboard UI.
 
 ## Setup
 
@@ -23,27 +23,21 @@ pip install -r requirements.txt
 
 ## Run (recommended)
 
-Launch the Streamlit dashboard (it will start the backend automatically):
-
-```bash
-streamlit run app/ui_streamlit.py
-```
-
-Then set your configuration in the sidebar (watched address + rate required).
-
-## Run Backend Separately (optional)
+Start the backend API server:
 
 ```bash
 python -m app.main
 ```
 
-In this mode, keep the backend running and open the UI in another terminal:
+Open the dashboard in your browser:
 
-```bash
-streamlit run app/ui_streamlit.py
+```
+http://localhost:8765/
 ```
 
-If you see an error like `address already in use`, either stop the existing backend process or set a different port via `POLY_API_PORT` or the Streamlit sidebar `api_port` field.
+Then set your configuration in the form (watched address + rate required).
+
+If you see an error like `address already in use`, either stop the existing backend process or set a different port via `POLY_API_PORT`.
 
 ## Output Files
 
@@ -52,7 +46,7 @@ All runtime files are created under `output/`:
 - `output/events.ndjson` – normalized activity/trade events.
 - `output/paper_trades.ndjson` – order lifecycle events.
 - `output/state.json` – dedup state.
-- `output/session.json` – Streamlit config.
+- `output/session.json` – Dashboard config.
 
 ## Replay Mode (optional)
 
@@ -61,4 +55,4 @@ Set `replay_path` in `output/session.json` to point at an NDJSON file. When `rep
 ## Notes
 
 - Terminal output is minimal (start, market change, reconnects).
-- Streamlit auto-refresh is controlled by `dashboard_refresh_seconds`.
+- Dashboard auto-refresh is controlled by `dashboard_refresh_seconds`.
